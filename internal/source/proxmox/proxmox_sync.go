@@ -273,7 +273,11 @@ func (ps *ProxmoxSource) syncVMs(nbi *inventory.NetboxInventory) error {
 	// Use a guard channel as semaphore to limit the number of goroutines
 	guard := make(chan struct{}, maxGoroutines)
 	// Use errChan to collect errors from goroutines
-	errChan := make(chan error, len(ps.Vms))
+	totalVMs := 0
+	for _, vms := range ps.Vms {
+		totalVMs += len(vms)
+	}
+	errChan := make(chan error, totalVMs)
 	// Use a WaitGroup to wait for all goroutines to complete
 	var wg sync.WaitGroup
 
@@ -719,7 +723,7 @@ func (ps *ProxmoxSource) syncVMNetworks(nbi *inventory.NetboxInventory, nbVM *ob
 						ipAddress.IPAddress,
 					)
 				}
-				prefix, mask, err := utils.GetPrefixAndMaskFromIPAddress(nbIPAddress.Address)
+				prefix, _, err := utils.GetPrefixAndMaskFromIPAddress(nbIPAddress.Address)
 				if err != nil {
 					ps.Logger.Warningf(
 						ps.Ctx,
@@ -727,8 +731,7 @@ func (ps *ProxmoxSource) syncVMNetworks(nbi *inventory.NetboxInventory, nbVM *ob
 						nbIPAddress.Address,
 						err,
 					)
-				} else if (ipAddress.IPAddressType == "ipv4" && mask != constants.MaxIPv4MaskBits) ||
-					(ipAddress.IPAddressType == "ipv6" && mask != constants.MaxIPv6MaskBits) {
+				} else if !utils.IsHostPrefix(prefix) {
 					_, err = nbi.AddPrefix(ps.Ctx, &objects.Prefix{
 						Prefix: prefix,
 						VRF:    ipVRF,
